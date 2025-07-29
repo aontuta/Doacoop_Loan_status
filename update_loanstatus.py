@@ -1,25 +1,49 @@
-import os
 import oracledb
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import os
+import json
 
-def main():
-    # โหลด config จาก environment variables
-    user = os.getenv("ORACLE_USER")
-    password = os.getenv("ORACLE_PASS")
-    dsn = os.getenv("ORACLE_DSN")
-    spreadsheet_name = os.getenv("SPREADSHEET_NAME")
+# --- ใช้ Thin mode โดยไม่เรียก init_oracle_client() ---
+# oracledb.init_oracle_client()  # <-- ตัดออก!
 
-    # เชื่อม Oracle
-    db_config = {
-        "user": user,
-        "password": password,
-        "dsn": dsn
-    }
+# --- ดึง config จาก environment variables ---
+ORACLE_USER = os.getenv("ORACLE_USER")
+ORACLE_PASS = os.getenv("ORACLE_PASS")
+ORACLE_DSN = os.getenv("ORACLE_DSN")
 
-    # ตั้งค่า Instant Client สำหรับ Oracle ถ้าจำเป็น (เช็คว่าต้องใช้หรือไม่)
-    # oracledb.init_oracle_client(lib_dir="/path/to/instantclient")  # ถ้ารันบน Linux VM อาจไม่ต้องใช้
+# --- โหลด credentials Google Service Account จาก environment variable (JSON string) ---
+GCP_CREDENTIALS_JSON = os.getenv("GCP_CREDENTIALS_JSON")
 
+def update_google_sheet(data):
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    creds_dict = json.loads(GCP_CREDENTIALS_JSON)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+
+    # เปิดชีท ชื่อ "DB" และแผ่นแรก
+    sheet = client.open("DB").sheet1
+
+    sheet.clear()  # เคลียร์ข้อมูลเดิม
+
+    if not data:
+        print("ไม่มีข้อมูลให้เขียนลงชีท")
+        return
+
+    headers = list(data[0].keys())
+    sheet.append_row(headers)
+
+    for row in data:
+        values = [row.get(h, "") for h in headers]
+        sheet.append_row(values)
+
+    print("เขียนข้อมูลลง Google Sheet สำเร็จ")
+
+def get_loan_status():
     sql = """
     SELECT
         mb.card_person || '' || TO_CHAR(mb.birth_date, 'DD') || '/' || TO_CHAR(mb.birth_date, 'MM') || '/' || (TO_CHAR(mb.birth_date, 'YYYY') + 543) AS login,
@@ -89,32 +113,23 @@ def main():
     """
 
     try:
-        with oracledb.connect(**db_config) as conn:
+        with oracledb.connect(user=ORACLE_USER, password=ORACLE_PASS, dsn=ORACLE_DSN) as conn:
             with conn.cursor() as cursor:
                 cursor.execute(sql)
                 columns = [col[0] for col in cursor.description]
                 rows = cursor.fetchall()
-
-        # เชื่อม Google Sheets
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-        client = gspread.authorize(creds)
-        sheet = client.open(spreadsheet_name).sheet1
-
-        # ล้างข้อมูลเก่าใน sheet
-        sheet.clear()
-
-        # เขียน header
-        sheet.append_row(columns)
-
-        # เขียนข้อมูลทีละแถว
-        for row in rows:
-            sheet.append_row(row)
-
-        print("✅ อัปเดตข้อมูล Google Sheet เรียบร้อย")
-
+                result = [dict(zip(columns, row)) for row in rows]
+                return result
     except Exception as e:
-        print(f"❌ เกิดข้อผิดพลาด: {e}")
+        print("❌ เกิดข้อผิดพลาด:", e)
+        return []
+
+def main():
+    data = get_loan_status()
+    if data:
+        update_google_sheet(data)
+    else:
+        print("ไม่พบข้อมูลหรือดึงข้อมูลไม่สำเร็จ")
 
 if __name__ == "__main__":
     main()
