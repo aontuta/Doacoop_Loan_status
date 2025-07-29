@@ -2,7 +2,8 @@ name: Update LoanStatus API Data
 
 on:
   schedule:
-    - cron: '0 5 * * *'   # รันทุกวัน 12.00 (เวลาไทย UTC+7 = 5.00 UTC)
+    # รันทุกวันเวลา 12:00 UTC (แก้เป็นเวลาที่ต้องการได้)
+    - cron: '0 12 * * *'
   workflow_dispatch:
 
 jobs:
@@ -10,14 +11,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - name: Set up Python 3.10
+      - name: Setup Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Create credentials.json from secret
+      - name: Create credentials.json
         run: echo "${{ secrets.GCP_CREDENTIALS }}" > credentials.json
 
       - name: Install dependencies
@@ -30,4 +32,5 @@ jobs:
           ORACLE_USER: ${{ secrets.ORACLE_USER }}
           ORACLE_PASS: ${{ secrets.ORACLE_PASS }}
           ORACLE_DSN: ${{ secrets.ORACLE_DSN }}
-        run: python update_to_sheet.py
+          SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
+        run: python update_loanstatus.py
