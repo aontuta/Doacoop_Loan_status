@@ -2,8 +2,8 @@ name: Update LoanStatus API Data
 
 on:
   schedule:
-    - cron: '0 5 * * *'  # รันทุกวันเวลา 12:00 ไทย (05:00 UTC)
-  workflow_dispatch:  # รันด้วยมือได้
+    - cron: '0 5 * * *'
+  workflow_dispatch:
 
 jobs:
   update_data:
