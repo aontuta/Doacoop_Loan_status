@@ -1,5 +1,0 @@
-Flask
-pyngrok
-oracledb
-gspread
-oauth2client
